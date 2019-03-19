@@ -8,6 +8,6 @@ all the codes that are used for training should go here. For the moment there ar
 ### Based on the error codes and site names and statuses
 codes are added under the training/SitesErrorCodes/ codes
 ### Add the log/error files information for training
-a new sub-package under the training can be created by @llayer under the training directory
+a new sub-package under the training can be created under the training directory
 ## models
 API to retrieve the suggestion values

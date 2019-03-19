@@ -1,5 +1,9 @@
-import CMS_AIErrorHandling as AIErrHand
+"""
+DNN training module to train on the action history
+:author: Hamed Bakhshiansohi <hbakhshi@cern.ch>
+"""
 
+from . import random_seed, SitesErrorCodes_path
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,9 +19,12 @@ from keras import regularizers
 from keras import metrics
 from sklearn.metrics import roc_curve,auc
 
-random_seed = AIErrHand.random_seed
-
 def top_first_categorical_accuracy(kk , name):
+    """
+    a method to create methods to be used as a metric.
+    :param int kk: the accuracy in the first kk categories will be checked
+    :param str name: the name of the metric
+    """
     def ktop(x , y ):
         return metrics.top_k_categorical_accuracy(x, y, kk)
 
@@ -25,7 +32,11 @@ def top_first_categorical_accuracy(kk , name):
     return ktop
 
 class DNNTrain :
-    def __init__(self , tasks , train_ratio=0.8 , model = None ):
+    def __init__(self , tasks , train_ratio=0.8):
+        """
+        :param Tasks tasks: an instance of Tasks class
+        :param float train_ratio: a number beween 0 and 1, specifying the ratio of data that is to be used for training
+        """
         self.Tasks = tasks
         self.X_train, self.y_train, self.X_test, self.y_test = tasks.GetTrainTestDS( train_ratio )
 
@@ -39,10 +50,15 @@ class DNNTrain :
             self.Y_train = np_utils.to_categorical(self.y_train, len(tasks.all_actions) , 'int8')
             self.Y_test = np_utils.to_categorical(self.y_test, len(tasks.all_actions) , 'int8')
 
-        self.model = model
-        
 
     def MakeModel(self, flatten=True , layers=[] , optimizer='adam' , loss='categorical_crossentropy' ):
+        """
+        to make the model and compile it, if the input are binary a layer with sigmoid activation is added at the end. otherwise, a layer with softmax is inserted
+        :param bool flatten: by default for the Task object it should be true
+        :param list layers: list of layer, each item should be of the format of (nNeurons, regularizer, activation). if regularizer is None, no regularization is done at this layer
+        :param optimizer: name of the optimizer, or an instance of the optimizer to be used
+        :param str loss: name of the loss function
+        """
         self.model = Sequential()
         if flatten :
             self.model.add(Flatten())
@@ -82,9 +98,15 @@ class DNNTrain :
         )
 
     def Fit(self,batch_size=100, epochs=10 , validation_split=0.0 , verbose=1):
+        """
+        do the fit of training. standard parameters of keras.Model.fit
+        """
         return self.model.fit(self.X_train, self.Y_train, batch_size=batch_size, epochs=epochs, verbose=verbose , validation_split=validation_split )
 
     def ROC(self):
+        """
+        plot ROC curve for test dataset
+        """
         self.roc_fpr, self.roc_tpr, self.roc_thresholds = roc_curve(self.Y_test, self.y_prediction.ravel() )
         self.roc_auc = auc(self.roc_fpr , self.roc_tpr)
 
@@ -97,9 +119,13 @@ class DNNTrain :
         plt.legend(loc='best')
         plt.show()
         
-    def Test(self):
+    def Test(self , plot_roc = False):
+        """
+        run the test and returns a map of predictions and true values.
+        """
         self.y_prediction = self.model.predict(self.X_test) #, self.Y_test, verbose=verbose )
-        self.ROC()
+        if plot_roc:
+            self.ROC()
         results = zip(self.y_prediction, self.Y_test)
 
         if not self.Tasks.IsBinary :
@@ -118,3 +144,21 @@ class DNNTrain :
 
             print(average_per_true)
         return results
+
+    def SaveModel(self, file_name , model_details , trainingdata_details):
+        """
+        Save the model to two files :
+        one hdf5 file and one json file under the models subdirectory of the current package are created with file_name
+        :param str file_name: the name of the file, without any extra extension
+        :param int model_details: the integer id of the model. this value will be stored in json file for future references. authors and developers should keep track of its values to make sense.
+        :param int trainingdata_details: the integer id of the dataset that was used for training the model. this value will be stored in json file for future references. authors and developers should keep track of its values to make sense.
+        """
+        self.model.save(SitesErrorCodes_path + "/models/" + file_name + ".hdf5")
+        with open( SitesErrorCodes_path + "/models/" + file_name + '.json', 'w') as fp:
+            json.dump({'all_sites':self.Tasks.all_sites ,
+                       'all_errors':self.Tasks.all_errors ,
+                       'all_actions':self.Tasks.all_actions ,
+                       'TiersOnly':self.Tasks.TiersOnly ,
+                       'IsBinary':self.Tasks.IsBinary ,
+                       'model':model_details,
+                       'trainingdata':trainingdata_details} , fp)
